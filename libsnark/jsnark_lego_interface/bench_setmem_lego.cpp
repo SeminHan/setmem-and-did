@@ -228,7 +228,7 @@ void bench_did(size_t batch_size, auto hash_type) {
 
 	LegoBenchGadget<def_pp> cp_did(cp_did_pub_input_size, cp_did_batch_size, cp_did_constraint_size);
 
-	auto tag = (hash_type == SHA) ? "MerkleSHA" : "MerklePos";
+	auto tag = (hash_type == SHA) ? "SHA" : "Pos";
 
 	string tag_prv = fmt::format("## {}prv_cred{}", tag, batch_size);
 	string tag_vfy = fmt::format("## {}vfy__cred{}", tag, batch_size);	
