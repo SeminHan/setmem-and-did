@@ -93,7 +93,7 @@ void init_setmem_input_and_relation(string arith_file, string input_file, auto &
 	cout << endl;
 #endif
 
-	//assert(cs.is_valid());
+	assert(cs.is_valid());
 
 	// removed cs.is_valid() check due to a suspected (off by 1) issue in a newly added check in their method.
         // A follow-up will be added.
@@ -103,7 +103,7 @@ void init_setmem_input_and_relation(string arith_file, string input_file, auto &
 	}
 
 
-	//r1cs_example<FieldT> example(cs, primary_input, auxiliary_input);
+	r1cs_example<FieldT> example(cs, primary_input, auxiliary_input);
 
 	// NB: here we simplify this having all public input committed. Could be otherwise if we changed interface with JSnark
 	auto pub_input = vector<libff::Fr<libsnark::default_r1cs_gg_ppzksnark_pp>>(0);
@@ -195,8 +195,49 @@ void bench_merkle(size_t batch_size, size_t tree_depth, auto hash_type)
 
 	cp_merkle.bench_prv(nreps, tag_prv);
 	cp_merkle.bench_vfy(nreps, tag_vfy);
-
+	cout << "=======================NUMBER OF CONSTRAINTS==========================" << endl << cp_merkle_constraint_size << endl; 
 }
+
+template <typename ppT>
+void bench_did(size_t batch_size, auto hash_type) {
+	size_t u_size, sr_size;
+	set_comm_input_sizes(batch_size, u_size, sr_size);
+
+	size_t hash_size, integer_size;
+	size_t cp_did_pub_input_size, cp_did_batch_size, cp_did_constraint_size;
+
+	hash_size = (hash_type == SHA) ? SHA_SZ : POSEIDON_SZ;
+	if(batch_size == 1) {
+		integer_size = 2863;
+	}
+	else if(batch_size == 16) {
+		integer_size = 8946;
+	}
+	else if(batch_size == 64) {
+		integer_size = 27977;
+	}
+
+	cp_did_pub_input_size = 256;
+	cp_did_batch_size = batch_size;
+
+// batch_size * 20 --> constraint number requiring to check that each attribute meets a simple condition like equality, range, or light add/mul.
+// batch_size * 2 * hash_size --> the number of constarints for h == H(attr || holderID) + c == H(h || issuerID)
+// integer_size = the number of constaints requiring to check that k' = r + ush mod l
+// hash_size = range proof by hashing the u_s
+	cp_did_constraint_size = batch_size * 20 + batch_size * 2 * hash_size + integer_size + hash_size;
+
+	LegoBenchGadget<def_pp> cp_did(cp_did_pub_input_size, cp_did_batch_size, cp_did_constraint_size);
+
+	auto tag = (hash_type == SHA) ? "MerkleSHA" : "MerklePos";
+
+	string tag_prv = fmt::format("## {}prv_cred{}", tag, batch_size);
+	string tag_vfy = fmt::format("## {}vfy__cred{}", tag, batch_size);	
+
+	cp_did.bench_prv(nreps, tag_prv);
+	cp_did.bench_vfy(nreps, tag_vfy);
+	cout << "=======================NUMBER OF CONSTRAINTS==========================" << endl << cp_did_constraint_size << endl; 
+}
+
 
 void init_to_rnd(size_t lenbits, BIGNUM **res)
 {
@@ -414,7 +455,6 @@ void bench_rsa(size_t batch_size)
 	
 	const string arith_file_fmt = "../setmem_rel_inputs/setmem{}.arith";
 	const string input_file_fmt = "../setmem_rel_inputs/setmem{}.in";
-
 	rel_input_t relation_and_input;
 	bool successBit = false;
 	lego_proof<def_pp> cparith_prf; 
@@ -424,7 +464,8 @@ void bench_rsa(size_t batch_size)
 	string input_file = fmt::format(input_file_fmt, batch_size);
 
 	// setup 
-	init_setmem_input_and_relation(arith_file, input_file, relation_and_input);
+	init_setmem_input_and_relation(arith_file_fmt, input_file_fmt, relation_and_input);
+	
 	libff::print_header("## LegoGroth Generator");
 	lego_keypair<def_pp> keypair(lego_kg<def_pp>(relation_and_input.ck, relation_and_input.r1cs()) );
 
@@ -484,9 +525,6 @@ void bench_rsa(size_t batch_size)
 	
 }
 
-
-
-
 void print_err()
 {
 	cerr << "Error parsing args." << endl;
@@ -501,12 +539,14 @@ int main(int argc, char **argv) {
 	// Usage:
 	// either, $ ./PROGRAM_NAME merkle [poseidon||sha] depth
 	// or,     $ ./PROGRAM_NAME rsa||pokeonly  
+	//  	   $ ./PROGRAM_NAME did [poseidon||sha]	
 
 	std::vector<std::string> args(argv, argv+argc);
 
 	bool doing_rsa = false;
 	bool doing_pokeonly = false;
 	bool doing_mswap = false;
+	bool doing_did = false;
 
 	auto hash_type = POSEIDON; // default
 	size_t tree_dpt = 16;
@@ -519,6 +559,11 @@ int main(int argc, char **argv) {
 			doing_pokeonly = true;
 		} else if (args[1] == "mswap") {
 			doing_mswap = true;
+		} else if(args[1] == "did") {
+			doing_did = true;
+			if(args[2] == "sha") {
+				hash_type = SHA;
+			}
 		} else if (args[1] != "merkle" || argc < 4) {
 			print_err();
 			return 1;
@@ -526,7 +571,6 @@ int main(int argc, char **argv) {
 				if (argc > 2 && args[2] == "sha")
 					hash_type = SHA;
 				tree_dpt = stoi(args[3]);
-
 		}
 	}
 
@@ -545,8 +589,7 @@ int main(int argc, char **argv) {
 	//auto batches = {1, 16, 32, 64, 128}; // batches  rsa
 	//auto batches = {1024, 2048, 4096};
 	auto batches = {1, 16, 64}; // batches SHA
-	 
-
+	
 	for (size_t batch_size : batches ) {
 		if (doing_mswap) {
 			cout << endl << "## Benchmarking OUR multiswap protocol with batch n = " << batch_size << endl << endl;
@@ -560,12 +603,18 @@ int main(int argc, char **argv) {
 		else if (doing_rsa) {
 			cout << endl << "## Benchmarking our RSA-based protocol with batch n = " << batch_size << endl << endl;
 			bench_rsa<def_pp>(batch_size);
-		} else {
+		} else if (doing_did) {
+			cout << endl <<  "## Benchmarking our RSA-based protocol with batch n = " << batch_size << endl << endl;
+			bench_did<def_pp>(batch_size, hash_type);
+		}
+		else {
 			cout << endl << "## Benchmarking " << args[2] << " Merkle with batch n = " << batch_size 
 				<< " and depth " << tree_dpt << endl << endl;
 			bench_merkle<def_pp>(batch_size, tree_dpt, hash_type);
 		} 
 	}
+	
+	
 
 
 	return 0;

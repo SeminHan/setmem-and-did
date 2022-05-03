@@ -1,0 +1,2 @@
+/usr/bin/ar qc libmembership.a  CMakeFiles/membership.dir/zk_proof_systems/ppzksnark/membership/membership.cpp.o
+/usr/bin/ranlib libmembership.a

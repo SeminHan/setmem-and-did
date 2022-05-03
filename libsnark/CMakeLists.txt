@@ -403,6 +403,53 @@ target_link_libraries(
   snark
 )
 
+#MembershipDID
+set(
+  ${SOURCE_FILES}
+
+  zk_proof_systems/ppzksnark/membership/did_bench.cpp
+  zk_proof_systems/ppzksnark/membership/membership_did.cpp
+)
+include_directories("zk_proof_systems/ppzksnark/membership")
+
+add_executable(
+  MembershipDID
+
+  zk_proof_systems/ppzksnark/membership/did_bench.cpp
+  zk_proof_systems/ppzksnark/membership/membership_did.cpp
+)
+
+target_link_libraries(
+  MembershipDID
+  
+  membership
+  snark
+)
+
+
+#PoseidonTest
+set(
+  ${SOURCE_FILES}
+
+  zk_proof_systems/ppzksnark/membership/poseidonTest.cpp
+  zk_proof_systems/ppzksnark/membership/poseidon.cpp
+)
+include_directories("zk_proof_systems/ppzksnark/membership")
+
+add_executable(
+  PoseidonTest
+
+  zk_proof_systems/ppzksnark/membership/poseidonTest.cpp
+  zk_proof_systems/ppzksnark/membership/poseidon.cpp
+)
+
+target_link_libraries(
+  PoseidonTest
+
+  snark
+)
+
+
 # Tests
 add_executable(
   common_routing_algorithms_test

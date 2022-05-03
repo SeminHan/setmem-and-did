@@ -49,7 +49,7 @@ using namespace libsnark;
 typedef libff::Fr<libff::default_ec_pp> FieldT;
 
 const string USAGE = 
-    "Set membership test\n\n\tUSAGE:\n\t\t./MembershipTest [Version] <batching_size> <set_size>\n\n\tVersion:\n\t\tnonopt: Non-optimized version; Membership proof: (W, C, k, h)\n\n\t\topt: Optimized version(with using PoKE); Membership proof: (W, C, k', h, Q, l)\n";
+    "Set membership test\n\n\tUSAGE:\n\t\t./MembershipTest [Version] <batching_size> <set_size> <hashes(poseidon/sha, default is sha)>\n\n\tVersion:\n\t\tnonopt: Non-optimized version; Membership proof: (W, C, k, h)\n\n\t\topt: Optimized version(with using PoKE); Membership proof: (W, C, k', h, Q, l)\n";
 
 // This file executes zk-SNARK friendly membership proof from 
 
@@ -64,6 +64,7 @@ typedef struct {
     string version;
     int batching_size;
     int set_size;
+    string hash;
 }input_args;
 
 template<typename ppT> 
@@ -80,19 +81,28 @@ void r1cs_gg_ppzksnark_keygen(libsnark::r1cs_example<libff::Fr<ppT>> &example, s
 
 int main(int argc, char* argv[]) {
     int ver_flag;
+    int hash_type = 0;
     bool success_vfy;
 
-    if(argc != 4) {
+    if(argc != 4 && argc !=5) {
         cout << "Invalid argument error!" << endl << endl;
         cout << USAGE << endl;
         return 0;
     }
-
+    
+   
     input_args* args = new input_args;
+
+    if(argc == 4) {
+        args->hash = "sha";
+    }
 
     args->version = argv[1];
     args->batching_size = atoi(argv[2]); // the number of existing user sets
     args->set_size = atoi(argv[3]); // the number of users to be proved
+    args->hash = argv[4];
+
+
 
     if(args->version == "nonopt") {
        ver_flag = 0;
@@ -103,6 +113,14 @@ int main(int argc, char* argv[]) {
     else {
         cout << USAGE << endl;
         return 0;
+    }
+
+    if(args->hash == "sha") {
+        hash_type = 0;
+    }
+    else if(args->hash == "poseidon") {
+        cout << "Poseidon" << endl << endl;
+        hash_type = 1;
     }
 
     // This is only for getting the commitment key, which is G_1, G_2, ... in SNARK. 
@@ -168,8 +186,8 @@ int main(int argc, char* argv[]) {
     add(S, user_element);    
     accumulate(pp, S, ACC);
     if(!ver_flag) {
-        compute(snark, snark_key, snark_proof, pp, commit_base, S, user_element, proof);
-        success_vfy = verify(snark, snark_key.vk, snark_proof, pp, ACC, S, proof);
+        compute(snark, snark_key, snark_proof, pp, commit_base, S, user_element, proof, hash_type);
+        success_vfy = verify(snark, snark_key.vk, snark_proof, pp, ACC, S, proof, hash_type);
         // success_vfy = verify(pp, snark_key.vk, snark, ACC, S, proof, snark_proof);
        
         print_debug("(leave) Membership(non-opt) test out of circuit");
@@ -182,8 +200,8 @@ int main(int argc, char* argv[]) {
         proof_size(proof, ver_flag);
     }
     else {
-        optCompute(snark, snark_key, snark_proof, pp, commit_base, S, user_element, proof);
-        success_vfy = optVerify(snark, snark_key.vk, snark_proof, pp, ACC, S, proof);
+        optCompute(snark, snark_key, snark_proof, pp, commit_base, S, user_element, proof, hash_type);
+        success_vfy = optVerify(snark, snark_key.vk, snark_proof, pp, ACC, S, proof, hash_type);
         // success_vfy = optVerify(pp, snark_key.vk, snark, ACC, S, proof, snark_proof);
         print_debug("(leave) Membership(opt) test out of circuit");
         if(success_vfy) {

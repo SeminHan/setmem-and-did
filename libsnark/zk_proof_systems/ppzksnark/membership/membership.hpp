@@ -41,6 +41,8 @@ namespace membership {
         BIGNUM* l;
     }mem_proof;
 
+    const string FIELD_PRIME = "1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab";  
+
     int pp_init(public_param* pp);
     
     int pp_clear(public_param* pp);
@@ -57,6 +59,14 @@ namespace membership {
 
     void Hash2(BIGNUM* ret, BIGNUM* W, BIGNUM* C_x, BIGNUM* C_y, BIGNUM* R);
 
+    void Hash3(BIGNUM* ret, BIGNUM* h);
+
+    void hashPos1(BIGNUM* ret, BIGNUM* sk);
+
+    void hashPos2(BIGNUM* ret, BIGNUM* W, BIGNUM* C_x, BIGNUM* C_y, BIGNUM* R);
+
+    void hashToPrimePos(BIGNUM* ret, BIGNUM* h);
+
     void setup(public_param* pp);
 
     void add(vector<BIGNUM*> &S, vector<BIGNUM*> u);
@@ -66,20 +76,20 @@ namespace membership {
     void compute(libsnark::r1cs_example<libff::Fr<libsnark::default_r1cs_gg_ppzksnark_pp>> snark_ex, 
     const libsnark::r1cs_gg_ppzksnark_keypair<libsnark::default_r1cs_gg_ppzksnark_pp> snark_key,
     libsnark::r1cs_gg_ppzksnark_proof<libsnark::default_r1cs_gg_ppzksnark_pp> &snark_proof,
-    public_param* pp, libff::G1_vector<def_pp> &commit_base, vector<BIGNUM*> S, vector<BIGNUM*> u, mem_proof* proof);
+    public_param* pp, libff::G1_vector<def_pp> &commit_base, vector<BIGNUM*> S, vector<BIGNUM*> u, mem_proof* proof, int hash_type);
 
     void optCompute(libsnark::r1cs_example<libff::Fr<libsnark::default_r1cs_gg_ppzksnark_pp>> snark_ex,
     const libsnark::r1cs_gg_ppzksnark_keypair<libsnark::default_r1cs_gg_ppzksnark_pp> snark_key,
     libsnark::r1cs_gg_ppzksnark_proof<libsnark::default_r1cs_gg_ppzksnark_pp> &snark_proof,
-    public_param* pp, libff::G1_vector<def_pp> &commit_base, vector<BIGNUM*> S, vector<BIGNUM*> u, mem_proof* proof);
+    public_param* pp, libff::G1_vector<def_pp> &commit_base, vector<BIGNUM*> S, vector<BIGNUM*> u, mem_proof* proof, int hash_type);
 
     bool verify(libsnark::r1cs_example<libff::Fr<libsnark::default_r1cs_gg_ppzksnark_pp>> snark_ex, 
     libsnark::r1cs_gg_ppzksnark_verification_key<libsnark::default_r1cs_gg_ppzksnark_pp> snark_vk,
     libsnark::r1cs_gg_ppzksnark_proof<libsnark::default_r1cs_gg_ppzksnark_pp> snark_proof,
-    public_param* pp, BIGNUM* &ACC, vector<BIGNUM*> S, mem_proof* proof);
+    public_param* pp, BIGNUM* &ACC, vector<BIGNUM*> S, mem_proof* proof, int hash_type);
 
     bool optVerify(libsnark::r1cs_example<libff::Fr<libsnark::default_r1cs_gg_ppzksnark_pp>> snark_ex, 
     libsnark::r1cs_gg_ppzksnark_verification_key<libsnark::default_r1cs_gg_ppzksnark_pp> snark_vk, 
     libsnark::r1cs_gg_ppzksnark_proof<libsnark::default_r1cs_gg_ppzksnark_pp> snark_proof,
-    public_param* pp, BIGNUM* &ACC, vector<BIGNUM*> S, mem_proof* proof);
+    public_param* pp, BIGNUM* &ACC, vector<BIGNUM*> S, mem_proof* proof, int hash_type);
 }

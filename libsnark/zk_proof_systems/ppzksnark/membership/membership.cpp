@@ -15,19 +15,23 @@
 #include <libsnark/common/default_types/r1cs_gg_ppzksnark_pp.hpp>   
 #include <libsnark/zk_proof_systems/ppzksnark/membership/membership_snark.hpp>
 #include <libsnark/relations/constraint_satisfaction_problems/r1cs/examples/r1cs_examples.hpp>
+
+#include "poseidon.cpp"
+
 //#include <libsnark/jsnark_interface/CircuitReader.hpp>
 
 
 
 
 using namespace std;
+using namespace Hashes;
 using def_pp = libsnark::default_r1cs_gg_ppzksnark_pp;
 
 
 
 namespace membership{
 
-    // RSA numbre is from #https://en.wikipedia.org/wiki/RSA_numbers#RSA-2048
+    // RSA number is from #https://en.wikipedia.org/wiki/RSA_numbers#RSA-2048
     const char* RSA_2048 = "25195908475657893494027183240048398571429282126204032027777137836043662020707595556264018525880784406918290641249515082189298559149176184502808489120072844992687392807287776735971418347270261896375014971824691165077613379859095700097330459748808428401797429100642458691817195118746121515172654632282216869987549182422433637259085141865462043576798423387184774447920739934236584823824281198163815010674810451660377306056201619676256133844143603833904414952634432190114657544454178424020924616515723350778707749817125772467962926386356373289912154831438167899885040445364023527381951378636564391212010397122822120720357";
     // Assume that the lambda is 256; if 128 -> 727 is the last element. 
     const vector<int> odd_prime = {3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 
@@ -44,6 +48,9 @@ namespace membership{
         1291, 1297, 1301, 1303, 1307, 1319, 1321, 1327, 1361, 1367, 1373, 1381, 1399, 1409, 1423, 1427, 1429, 1433, 1439, 1447,
         1451, 1453, 1459, 1471, 1481, 1483, 1487, 1489, 1493, 1499, 1511, 1523, 1531, 1543, 1549, 1553, 1559, 1567, 1571, 1579, 
         1583, 1597, 1601, 1607, 1609, 1613, 1619, 1621};
+
+    // const string FIELD_PRIME = "1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab";  
+    const string FIELD_PRIME = "52435875175126190479447740508185965837690552500527637822603658699938581184513";
 
     // Public parameter for membership proof
     // N is RSA modular where N <- p*q, and V is the group element. 
@@ -179,6 +186,63 @@ namespace membership{
         }while(!BN_is_prime(ret, 5, NULL, bn_ctx, NULL));
     }
 
+    void hashPos1(BIGNUM* ret, BIGNUM* sk) {
+        BIGNUM* BN_FIELD_PRIME = BN_new();
+        BN_hex2bn(&BN_FIELD_PRIME, FIELD_PRIME.c_str());
+
+        vector<BIGNUM*> bn_vec;
+        bn_vec.push_back(sk);
+        ret = Poseidon::hash(bn_vec, BN_FIELD_PRIME);
+    }
+
+    void hashPos2(BIGNUM* ret, BIGNUM* W, BIGNUM* C_x, BIGNUM* C_y, BIGNUM* R) {
+        BIGNUM* BN_FIELD_PRIME = BN_new();
+        BN_hex2bn(&BN_FIELD_PRIME, FIELD_PRIME.c_str());
+
+        string _W = BN_bn2hex(W);
+        string _Cx = BN_bn2hex(C_x);
+        string _Cy = BN_bn2hex(C_y);
+        string _R = BN_bn2hex(R);
+
+        string _inputs = _W + _Cx + _Cy + _R;
+        
+        BIGNUM* bn_input = BN_new();
+        BN_hex2bn(&bn_input, _inputs.c_str());
+        vector<BIGNUM*> bn_vec = {bn_input};
+        // bn_vec.push_back(bn_input);
+
+        BIGNUM* _output = BN_new();
+        _output = Poseidon::hash(bn_vec, BN_FIELD_PRIME);
+
+        BN_copy(ret, _output);
+
+        BN_free(bn_input);
+        BN_free(_output);
+        // ret = Poseidon::hash(bn_vec, BN_FIELD_PRIME);
+    }
+
+    void hashToPrimePos(BIGNUM* ret, BIGNUM* h) {
+        BIGNUM* BN_FIELD_PRIME = BN_new();
+        BN_CTX* bn_ctx = BN_CTX_new();
+        BN_hex2bn(&BN_FIELD_PRIME, FIELD_PRIME.c_str());
+
+        BIGNUM* prime_l = BN_new();
+
+        BIGNUM* bn_tmp = BN_new();
+        BN_copy(bn_tmp, h);
+
+        vector<BIGNUM*> bn_vec;
+        bn_vec.push_back(bn_tmp);
+        
+        do {
+            prime_l = Poseidon::hash(bn_vec, BN_FIELD_PRIME);
+        }while(!BN_is_prime(prime_l, 5, NULL, bn_ctx, NULL));
+
+        BN_copy(ret, prime_l);
+
+        BN_CTX_free(bn_ctx);
+    }
+
     void setup(public_param* pp) {
         libff::start_profiling();
         libff::enter_block("Call to setup for membership test");
@@ -243,7 +307,7 @@ namespace membership{
     void compute(libsnark::r1cs_example<libff::Fr<libsnark::default_r1cs_gg_ppzksnark_pp>> snark_ex, 
     const libsnark::r1cs_gg_ppzksnark_keypair<libsnark::default_r1cs_gg_ppzksnark_pp> snark_key,
     libsnark::r1cs_gg_ppzksnark_proof<libsnark::default_r1cs_gg_ppzksnark_pp> &snark_proof,
-    public_param* pp, libff::G1_vector<def_pp> &commit_base, vector<BIGNUM*> S, vector<BIGNUM*> u, mem_proof* proof) {
+    public_param* pp, libff::G1_vector<def_pp> &commit_base, vector<BIGNUM*> S, vector<BIGNUM*> u, mem_proof* proof, int hash_type) {
         libff::start_profiling();
         libff::enter_block("Call to compute");
         vector<int> rand_b; // b_i <- {0, 1}
@@ -399,7 +463,12 @@ namespace membership{
         // Since wire supports only 254bits, h, which can be maximum 256 bits, we just cut out exceeded bits. 
         // h <- H(W||C||R)
         libff::enter_block("    Call to compute (Hash value)");
-        Hash2(proof->h, proof->W, proof->C_x, proof->C_y, bn_R);
+        if(hash_type == 0) {
+            Hash2(proof->h, proof->W, proof->C_x, proof->C_y, bn_R);
+        }
+        else if(hash_type == 1) {
+            hashPos2(proof->h, proof->W, proof->C_x, proof->C_y, bn_R);
+        }
         libff::leave_block("    Call to compute (Hash value)");
         
         // k <- r + u*s*h
@@ -426,7 +495,7 @@ namespace membership{
     void optCompute(libsnark::r1cs_example<libff::Fr<libsnark::default_r1cs_gg_ppzksnark_pp>> snark_ex,
     const libsnark::r1cs_gg_ppzksnark_keypair<libsnark::default_r1cs_gg_ppzksnark_pp> snark_key,
     libsnark::r1cs_gg_ppzksnark_proof<libsnark::default_r1cs_gg_ppzksnark_pp> &snark_proof,
-    public_param* pp, libff::G1_vector<def_pp> &commit_base, vector<BIGNUM*> S, vector<BIGNUM*> u, mem_proof* proof) {
+    public_param* pp, libff::G1_vector<def_pp> &commit_base, vector<BIGNUM*> S, vector<BIGNUM*> u, mem_proof* proof, int hash_type) {
         libff::start_profiling();
         libff::enter_block("Call to Optimized Compute (generate membership proof)");
         
@@ -582,12 +651,25 @@ namespace membership{
         libff::leave_block("Call to Optimized Compute (generate commit value from s, r, u)");
 
         // h <- H(W||C||R)
-        Hash2(proof->h, proof->W, proof->C_x, proof->C_y, bn_R);
-        
+        libff::enter_block("Call to Optimized Compute (generate h, SHA/Poseidon)");
+        if(hash_type == 0) {
+            Hash2(proof->h, proof->W, proof->C_x, proof->C_y, bn_R);
+        }
+        else if(hash_type == 1) {
+            hashPos2(proof->h, proof->W, proof->C_x, proof->C_y, bn_R);
+        }
+        libff::leave_block("Call to Optimized Compute (generate h, SHA/Poseidon)");
+
         // l <- H_3(h), l is the prime
         proof->l = BN_new();
         libff::enter_block("Call to Optimized Compute (generate l, which is prime)");
-        Hash3(proof->l, proof->h);
+        if(hash_type == 0) {
+            Hash3(proof->l, proof->h);
+        }
+        else if(hash_type == 1) {
+            hashToPrimePos(proof->l, proof->h);
+        }        
+        
         libff::leave_block("Call to Optimized Compute (generate l, which is prime)");
         
         // k <- r + u*s*h
@@ -599,7 +681,6 @@ namespace membership{
         BN_mul(bn_ush, bn_u, bn_sh, bn_ctx);
         BN_add(proof->k, bn_r, bn_ush);
         libff::leave_block("Call to Optimized Compute (generate membership proof k)");
-
 
         // k' <- k mod l 
         libff::enter_block("Call to Optimized Compute (generate optimized membership proof k')");
@@ -615,6 +696,14 @@ namespace membership{
         BN_mod_exp(proof->Q, proof->W, bn_exp_ret, bn_N, bn_ctx);
         libff::leave_block("Call to Optimized Compute (generate optimized membership proof Q)");
 
+        cout << "k' : " << BN_bn2hex(proof->opt_k) << endl;
+        cout << "r : " << BN_bn2hex(bn_r) << endl;
+        cout << "u : " << BN_bn2hex(bn_u) << endl;
+        cout << "s : " << BN_bn2hex(bn_s) << endl;
+        cout << "h : " << BN_bn2hex(proof->h) << endl;
+        cout << "l : " << BN_bn2hex(proof->l) << endl;
+        // cout << "R : " << endl << BN_bn2hex(bn_R) << endl;
+
         BN_CTX_free(bn_ctx);
         libff::leave_block("Call to Optimized compute (generate membership proof)");
     }
@@ -622,7 +711,7 @@ namespace membership{
     bool verify(libsnark::r1cs_example<libff::Fr<libsnark::default_r1cs_gg_ppzksnark_pp>> snark_ex, 
     libsnark::r1cs_gg_ppzksnark_verification_key<libsnark::default_r1cs_gg_ppzksnark_pp> snark_vk,
     libsnark::r1cs_gg_ppzksnark_proof<libsnark::default_r1cs_gg_ppzksnark_pp> snark_proof,
-    public_param* pp, BIGNUM* &ACC, vector<BIGNUM*> S, mem_proof* proof) {
+    public_param* pp, BIGNUM* &ACC, vector<BIGNUM*> S, mem_proof* proof, int hash_type) {
         libff::start_profiling();
         libff::enter_block("Call to verification");
         BIGNUM* tmp = BN_new();
@@ -648,7 +737,12 @@ namespace membership{
         BN_mod_mul(bn_ret, bn_num, bn_denom, bn_N, bn_ctx); // bn_ret <- W^k * ACC^{-h}
 
         // H(W || C || ACC^h/W^k)
-        Hash2(tmp, proof->W, proof->C_x, proof->C_y, bn_ret);
+        if(hash_type == 0) {
+            Hash2(tmp, proof->W, proof->C_x, proof->C_y, bn_ret); 
+        }
+        else if(hash_type == 1) {
+            hashPos2(tmp, proof->W, proof->C_x, proof->C_y, bn_ret); 
+        }
 
         bool vfy_pass = (!BN_cmp(proof->h, tmp) && snark_verify);
         libff::leave_block("Call to verification");
@@ -660,7 +754,7 @@ namespace membership{
    bool optVerify(libsnark::r1cs_example<libff::Fr<libsnark::default_r1cs_gg_ppzksnark_pp>> snark_ex, 
     libsnark::r1cs_gg_ppzksnark_verification_key<libsnark::default_r1cs_gg_ppzksnark_pp> snark_vk,
     libsnark::r1cs_gg_ppzksnark_proof<libsnark::default_r1cs_gg_ppzksnark_pp> snark_proof,
-    public_param* pp, BIGNUM* &ACC, vector<BIGNUM*> S, mem_proof* proof) {
+    public_param* pp, BIGNUM* &ACC, vector<BIGNUM*> S, mem_proof* proof, int hash_type) {
         libff::start_profiling();
         libff::enter_block("Call to Optimized verification");
         BIGNUM* tmp = BN_new();
@@ -691,8 +785,15 @@ namespace membership{
         BN_mod_inverse(bn_denom, bn_denom, bn_N, bn_ctx); // bn_denom <- ACC^{-h}
         BN_mod_mul(bn_ret, bn_num, bn_denom, bn_N, bn_ctx); // bn_ret <- Q^l * W^k' * ACC^{-h}
 
+        // cout << "bn_ret : " << endl << BN_bn2hex(bn_ret) << endl;
+
         // H(W || C || Q^l * W^k' * ACC^{-h})
-        Hash2(tmp, proof->W, proof->C_x, proof->C_y, bn_ret); 
+        if(hash_type == 0) {
+            Hash2(tmp, proof->W, proof->C_x, proof->C_y, bn_ret); 
+        }
+        else if(hash_type == 1) {
+            hashPos2(tmp, proof->W, proof->C_x, proof->C_y, bn_ret); 
+        }
 
         bool vfy_pass = ((!BN_cmp(proof->h, tmp)) && snark_verify);
         BN_CTX_free(bn_ctx);
